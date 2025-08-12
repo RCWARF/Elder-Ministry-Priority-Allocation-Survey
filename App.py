@@ -11,9 +11,9 @@ st.set_page_config(page_title="Elder Ministry Priority Allocation", layout="wide
 st.title("Elder Ministry Priority Allocation Survey")
 st.write(
     """
-You have a fictional $100 to allocate among our church’s ministries. 
+You have a fictional 100 dollars to allocate among our church’s ministries. 
 Assign dollar amounts to any items under any of the five ministry priorities.
-Your total across all priorities must equal exactly $100.
+Your total across all priorities must equal exactly 100.
 
 This survey is anonymous.
     """
