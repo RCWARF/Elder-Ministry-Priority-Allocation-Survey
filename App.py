@@ -202,8 +202,8 @@ for p in PRIORITIES:
                     min_value=0,
                     max_value=100,
                     step=1,
-                    value=int(st.session_state.allocations[p][item]),
                     key=key,
+                    format="%d",
                 )
         with cols[1]:
             for item in right_items:
@@ -213,8 +213,8 @@ for p in PRIORITIES:
                     min_value=0,
                     max_value=100,
                     step=1,
-                    value=int(st.session_state.allocations[p][item]),
                     key=key,
+                    format="%d",
                 )
 
 # Totals and validation
