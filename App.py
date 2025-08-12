@@ -11,9 +11,9 @@ st.set_page_config(page_title="Elder Ministry Priority Allocation", layout="wide
 st.title("Elder Ministry Priority Allocation Survey")
 st.write(
     """
-You have a fictional **100** to allocate among our church’s ministries. 
+You have a fictional **100** dollars to allocate among our church’s ministries. 
 Assign dollar amounts to any items under **any** of the five ministry priorities.
-Your total across **all** priorities must equal **exactly 100**.
+Your total across **all** priorities must equal **exactly 100** dollars.
 
 This survey is **anonymous**.
     """
@@ -152,19 +152,31 @@ def make_personal_copy_csv():
 # ---------------------
 # Admin / Owner tools (set an optional admin key in secrets to reveal controls)
 # ---------------------
+import os
+
+# Prefer st.secrets; fall back to env var if running locally without secrets
 admin_key_secret = None
 try:
-    from streamlit.runtime.secrets import secrets
-    admin_key_secret = secrets.get("ADMIN_KEY", None)
+    admin_key_secret = st.secrets.get("ADMIN_KEY", None)
 except Exception:
     admin_key_secret = None
+if admin_key_secret is None:
+    admin_key_secret = os.environ.get("ADMIN_KEY")
 
 with st.sidebar:
     st.subheader("Owner tools")
     entered_key = st.text_input("Enter admin key to unlock", type="password")
-    owner_mode = bool(admin_key_secret) and entered_key == admin_key_secret
-    if not admin_key_secret:
-        st.caption("Tip: add ADMIN_KEY to Streamlit secrets to enable admin tools.")
+
+    # Normalize both sides just in case of stray spaces/newlines
+    def _norm(x):
+        return str(x).strip() if x is not None else None
+
+    owner_mode = _norm(admin_key_secret) is not None and _norm(entered_key) == _norm(admin_key_secret)
+
+    if admin_key_secret is None:
+        st.caption("Tip: add ADMIN_KEY to Streamlit secrets (or env var) to enable admin tools.")
+    elif entered_key and not owner_mode:
+        st.error("Admin key incorrect. Try again.")
 
 # ---------------------
 # Main UI
