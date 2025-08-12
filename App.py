@@ -11,11 +11,11 @@ st.set_page_config(page_title="Elder Ministry Priority Allocation", layout="wide
 st.title("Elder Ministry Priority Allocation Survey")
 st.write(
     """
-You have a fictional 100 dollars to allocate among our church’s ministries. 
-Assign dollar amounts to any items under any of the five ministry priorities.
-Your total across all priorities must equal exactly 100.
+You have a fictional **$100** to allocate among our church’s ministries. 
+Assign dollar amounts to any items under **any** of the five ministry priorities.
+Your total across **all** priorities must equal **exactly $100**.
 
-This survey is anonymous.
+This survey is **anonymous**.
     """
 )
 
@@ -100,10 +100,15 @@ def allocations_rows(timestamp_iso: str):
 
 
 def write_csv(rows):
-    """Append to a local CSV file (persists for the app instance)."""
+    """Append to a local CSV file (persists for the app instance) and also
+    save a per-response CSV under ./submissions/ for owner download.
+    """
+    import os
+    os.makedirs("submissions", exist_ok=True)
+
     header = ["timestamp", "priority", "item", "amount"]
     try:
-        # If file doesn't exist, write header first
+        # Create master CSV if missing
         try:
             with open("responses.csv", "x", newline="") as f:
                 writer = csv.writer(f)
@@ -111,10 +116,20 @@ def write_csv(rows):
         except FileExistsError:
             pass
 
+        # Append to master
         with open("responses.csv", "a", newline="") as f:
             writer = csv.writer(f)
             for r in rows:
                 writer.writerow(r)
+
+        # Also write a per-response CSV
+        ts_safe = rows[0][0].replace(":", "-")
+        per_path = os.path.join("submissions", f"submission_{ts_safe}.csv")
+        with open(per_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+            writer.writerows(rows)
+
         return True, None
     except Exception as e:
         return False, str(e)
@@ -133,6 +148,23 @@ def make_personal_copy_csv():
     output.seek(0)
     return output.getvalue()
 
+
+# ---------------------
+# Admin / Owner tools (set an optional admin key in secrets to reveal controls)
+# ---------------------
+admin_key_secret = None
+try:
+    from streamlit.runtime.secrets import secrets
+    admin_key_secret = secrets.get("ADMIN_KEY", None)
+except Exception:
+    admin_key_secret = None
+
+with st.sidebar:
+    st.subheader("Owner tools")
+    entered_key = st.text_input("Enter admin key to unlock", type="password")
+    owner_mode = bool(admin_key_secret) and entered_key == admin_key_secret
+    if not admin_key_secret:
+        st.caption("Tip: add ADMIN_KEY to Streamlit secrets to enable admin tools.")
 
 # ---------------------
 # Main UI
@@ -227,3 +259,101 @@ if submitted and total == 100:
             clear_all()
         else:
             st.error(f"There was an error saving your response: {err}")
+
+# ---------------------
+# Optional: Google Sheets integration (uncomment to use)
+# ---------------------
+# To use Google Sheets instead of a local CSV, add a service account JSON to Streamlit Secrets
+# and use gspread to append rows. Example setup:
+#
+# 1) In Streamlit, add secrets:
+#    [gcp_service_account]
+#    type = "service_account"
+#    project_id = "..."
+#    private_key_id = "..."
+#    private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+#    client_email = "...@...iam.gserviceaccount.com"
+#    client_id = "..."
+#    auth_uri = "https://accounts.google.com/o/oauth2/auth"
+#    token_uri = "https://oauth2.googleapis.com/token"
+#    auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+#    client_x509_cert_url = "..."
+#    spreadsheet_name = "Elder Ministry Responses"
+#
+# 2) Then replace write_csv with something like this:
+#
+# import gspread
+# from oauth2client.service_account import ServiceAccountCredentials
+#
+# def write_gsheet(rows):
+#     try:
+#         import json
+#         from streamlit.runtime.secrets import secrets
+#         sa = dict(secrets["gcp_service_account"])  # service account dict
+#         scope = [
+#             "https://spreadsheets.google.com/feeds",
+#             "https://www.googleapis.com/auth/drive",
+#         ]
+#         creds = ServiceAccountCredentials.from_json_keyfile_dict(sa, scope)
+#         gc = gspread.authorize(creds)
+#         sh = gc.open(secrets["gcp_service_account"]["spreadsheet_name"])  # by name
+#         ws = sh.sheet1
+#         for r in rows:
+#             ws.append_row(r)  # [timestamp, priority, item, amount]
+#         return True, None
+#     except Exception as e:
+#         return False, str(e)
+#
+# ...and call write_gsheet(rows) instead of write_csv(rows).
+
+# ---------------------
+# Owner / Admin Panel (visible with correct key)
+# ---------------------
+if 'owner_mode' in globals() and owner_mode:
+    st.markdown("---")
+    st.subheader("Admin: All Submissions")
+
+    import os, zipfile
+    from pathlib import Path
+
+    # Preview master CSV
+    if Path("responses.csv").exists():
+        try:
+            import pandas as pd
+            df = pd.read_csv("responses.csv")
+            st.caption(f"Total rows: {len(df)} (each row = one line item)")
+            st.dataframe(df, use_container_width=True, hide_index=True)
+
+            # Download master CSV
+            with open("responses.csv", "rb") as f:
+                st.download_button(
+                    "Download ALL responses (master CSV)",
+                    data=f.read(),
+                    file_name="all_responses.csv",
+                    mime="text/csv",
+                )
+        except Exception as e:
+            st.warning(f"Couldn't preview master CSV: {e}")
+    else:
+        st.info("No responses saved yet.")
+
+    # Zip up per-response CSVs for download
+    subs_dir = Path("submissions")
+    if subs_dir.exists():
+        files = list(subs_dir.glob("submission_*.csv"))
+        st.caption(f"Individual submission files: {len(files)}")
+        if files:
+            import io
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+                for fp in files:
+                    zf.write(fp, arcname=fp.name)
+            zip_buffer.seek(0)
+            st.download_button(
+                "Download ZIP of all individual submissions",
+                data=zip_buffer,
+                file_name="all_submissions.zip",
+                mime="application/zip",
+            )
+    st.success("Owner tools unlocked.")
+
